@@ -1,0 +1,11 @@
+{
+  "name": "My Vocabulary",
+  "short_name": "Vocabulary",
+  "description": "Личный словарь английских слов и тренажёр переводов",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7f9fc",
+  "theme_color": "#f7f9fc",
+  "icons": []
+}
