@@ -4,14 +4,14 @@ import { loadWords, saveWords, loadStats, saveStats, normalize, type Word, type 
 
 type Tab = 'dictionary' | 'add' | 'training'
 type Direction = 'en-ru' | 'ru-en'
-type ImportData = { version?: number; words?: Word[]; statistics?: { bestCorrectStreak?: number } }
+type ImportData = { version?: number; words?: Word[]; statistics?: { bestCorrectStreakEnRu?: number; bestCorrectStreakRuEn?: number } }
 const uid = () => crypto.randomUUID()
 const now = () => new Date().toISOString()
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('dictionary')
   const [words, setWords] = useState<Word[]>([])
-  const [stats, setStats] = useState<Stats>({ bestCorrectStreak: 0 })
+  const [stats, setStats] = useState<Stats>({ bestCorrectStreakEnRu: 0, bestCorrectStreakRuEn: 0 })
   const [ready, setReady] = useState(false)
   const [query, setQuery] = useState('')
   const [wordInput, setWordInput] = useState('')
@@ -59,10 +59,10 @@ export default function App() {
       const mode = window.prompt('Введите «объединить» или «заменить»', 'объединить')?.trim().toLowerCase()
       if (mode !== 'объединить' && mode !== 'заменить') return
       if (mode === 'заменить' && !window.confirm('Текущий словарь будет полностью заменён. Продолжить?')) return
-      if (mode === 'заменить') { setWords(imported); setStats({ bestCorrectStreak: Math.max(0, data.statistics?.bestCorrectStreak ?? 0) }); setNotice(`Импортировано слов: ${imported.length}`) }
+      if (mode === 'заменить') { setWords(imported); setStats({ bestCorrectStreakEnRu: Math.max(0, data.statistics?.bestCorrectStreakEnRu ?? 0), bestCorrectStreakRuEn: Math.max(0, data.statistics?.bestCorrectStreakRuEn ?? 0) }); setNotice(`Импортировано слов: ${imported.length}`) }
       else {
         const seen = new Set(words.map(w => normalize(w.word))); const additions = imported.filter(w => { const key = normalize(w.word); if (seen.has(key)) return false; seen.add(key); return true })
-        setWords(prev => [...prev, ...additions]); setStats(prev => ({ bestCorrectStreak: Math.max(prev.bestCorrectStreak, data.statistics?.bestCorrectStreak ?? 0) }))
+        setWords(prev => [...prev, ...additions]); setStats(prev => ({ bestCorrectStreakEnRu: Math.max(prev.bestCorrectStreakEnRu, data.statistics?.bestCorrectStreakEnRu ?? 0), bestCorrectStreakRuEn: Math.max(prev.bestCorrectStreakRuEn, data.statistics?.bestCorrectStreakRuEn ?? 0) }))
         setNotice(`Добавлено: ${additions.length}. Пропущено дубликатов: ${imported.length - additions.length}`)
       }
     } catch (error) { setNotice(error instanceof Error ? `Ошибка импорта: ${error.message}` : 'Не удалось прочитать файл') }
@@ -95,30 +95,58 @@ export default function App() {
 
 function wordLabel(n: number) { const mod10 = n % 10, mod100 = n % 100; if (mod10 === 1 && mod100 !== 11) return 'слово'; if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'слова'; return 'слов' }
 
+type TrainingCard = { word: Word; translation: string }
+
 function Training({ words, stats, setStats }: { words: Word[]; stats: Stats; setStats: React.Dispatch<React.SetStateAction<Stats>> }) {
   const [direction, setDirection] = useState<Direction>('en-ru')
   const [active, setActive] = useState(false)
-  const [deck, setDeck] = useState<Word[]>([])
+  const [deck, setDeck] = useState<TrainingCard[]>([])
   const [index, setIndex] = useState(0)
   const [answer, setAnswer] = useState('')
   const [feedback, setFeedback] = useState<'correct' | 'wrong' | 'manual' | null>(null)
   const [streak, setStreak] = useState(0)
   const [manualWord, setManualWord] = useState<Word | null>(null)
   const timer = useRef<number | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const current = deck[index]
-  const prompt = current ? (direction === 'en-ru' ? current.word : current.translations[0]) : ''
-  const expected = current ? (direction === 'en-ru' ? current.translations : [current.word]) : []
+  const prompt = current ? (direction === 'en-ru' ? current.word.word : current.translation) : ''
+  const expected = current ? (direction === 'en-ru' ? current.word.translations : [current.word.word]) : []
+  const bestStreak = direction === 'en-ru' ? stats.bestCorrectStreakEnRu : stats.bestCorrectStreakRuEn
+
   useEffect(() => () => { if (timer.current) window.clearTimeout(timer.current) }, [])
-  function shuffle(items: Word[]) { const a = [...items]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]] } return a }
-  function start() { setDeck(shuffle(words)); setIndex(0); setAnswer(''); setFeedback(null); setStreak(0); setActive(true) }
-  function next() { if (timer.current) window.clearTimeout(timer.current); if (index + 1 >= deck.length) { setDeck(shuffle(words)); setIndex(0) } else setIndex(i => i + 1); setAnswer(''); setFeedback(null); setManualWord(null) }
-  function scheduleNext() { timer.current = window.setTimeout(next, 1500) }
-  function mark(correct: boolean) { setFeedback(correct ? 'correct' : 'wrong'); const nextStreak = correct ? streak + 1 : 0; setStreak(nextStreak); if (correct && nextStreak > stats.bestCorrectStreak) setStats({ bestCorrectStreak: nextStreak }); scheduleNext() }
-  function check(e: React.FormEvent) { e.preventDefault(); if (!current || feedback) return; if (!answer.trim()) return; if (expected.some(v => normalize(v) === normalize(answer))) mark(true); else { setFeedback('manual'); setManualWord(current) } }
+  function shuffle(items: TrainingCard[]) { const a = [...items]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]] } return a }
+  function makeDeck(source: Word[], mode: Direction): TrainingCard[] {
+    const cards = mode === 'en-ru'
+      ? source.map(word => ({ word, translation: word.translations[0] ?? '' }))
+      : source.flatMap(word => word.translations.map(translation => ({ word, translation })))
+    return shuffle(cards)
+  }
+  function start() { setDeck(makeDeck(words, direction)); setIndex(0); setAnswer(''); setFeedback(null); setStreak(0); setActive(true) }
+  function next() {
+    if (timer.current) window.clearTimeout(timer.current)
+    if (index + 1 >= deck.length) { setDeck(makeDeck(words, direction)); setIndex(0) } else setIndex(i => i + 1)
+    setAnswer(''); setFeedback(null); setManualWord(null)
+  }
+  function scheduleNext() { if (timer.current) window.clearTimeout(timer.current); timer.current = window.setTimeout(next, 1000) }
+  function mark(correct: boolean) {
+    setFeedback(correct ? 'correct' : 'wrong')
+    const nextStreak = correct ? streak + 1 : 0
+    setStreak(nextStreak)
+    if (correct && nextStreak > bestStreak) setStats(prev => direction === 'en-ru'
+      ? { ...prev, bestCorrectStreakEnRu: nextStreak }
+      : { ...prev, bestCorrectStreakRuEn: nextStreak })
+    scheduleNext()
+  }
+  function check(e: React.FormEvent) {
+    e.preventDefault()
+    if (!current || feedback || !answer.trim()) return
+    if (expected.some(v => normalize(v) === normalize(answer))) mark(true)
+    else { setFeedback('manual'); setManualWord(current.word) }
+  }
   if (!words.length) return <section className="page"><div className="page-heading"><div><p className="eyebrow">ЗАКРЕПЛЯЙ ЗНАНИЯ</p><h1>Тренировка</h1><p className="muted">Добавь слова в словарь, чтобы начать заниматься.</p></div></div><div className="empty-state"><div className="empty-icon"><Dumbbell size={26}/></div><h2>Пока нечего повторять</h2><p>Сначала добавь несколько слов в словарь.</p></div></section>
-  if (!active) return <section className="page training-page"><div className="page-heading"><div><p className="eyebrow">ЗАКРЕПЛЯЙ ЗНАНИЯ</p><h1>Тренировка</h1><p className="muted">Небольшая практика каждый день.</p></div></div><div className="record-card"><div className="record-icon"><Trophy size={21}/></div><div><span>Личный рекорд</span><strong>{stats.bestCorrectStreak}</strong><small>правильных ответов подряд</small></div></div><div className="direction-card"><h2>Выбери направление</h2><button className={direction === 'en-ru' ? 'direction-option selected' : 'direction-option'} onClick={() => setDirection('en-ru')}><span className="direction-flag">EN</span><span><strong>Английский → Русский</strong><small>Вспоминай перевод слова</small></span><span className="radio-dot"/></button><button className={direction === 'ru-en' ? 'direction-option selected' : 'direction-option'} onClick={() => setDirection('ru-en')}><span className="direction-flag ru">RU</span><span><strong>Русский → Английский</strong><small>Вспоминай английское слово</small></span><span className="radio-dot"/></button><button className="primary-button full-button start-button" onClick={start}>Начать тренировку <ChevronRight size={18}/></button><p className="training-note">В тренировке {words.length} {wordLabel(words.length)}. Каждое встретится один раз за круг.</p></div></section>
-  return <section className="page training-page"><div className="training-topline"><button className="back-button" onClick={() => setActive(false)}>← Завершить</button><span>{index + 1} / {deck.length}</span></div><div className="streak-line"><span>Текущая серия</span><strong>{streak}</strong></div><div className="progress-track"><div style={{ width: `${((index + 1) / deck.length) * 100}%` }}/></div><div className="flash-card"><span className="card-direction">{direction === 'en-ru' ? 'ПЕРЕВЕДИ НА РУССКИЙ' : 'ПЕРЕВЕДИ НА АНГЛИЙСКИЙ'}</span><div className="flash-word">{prompt}</div><form onSubmit={check} className="answer-form"><input autoFocus disabled={!!feedback} value={answer} onChange={e => setAnswer(e.target.value)} placeholder="Твой перевод…"/><button className="primary-button" disabled={!!feedback || !answer.trim()} type="submit">Проверить</button></form>
-    {feedback === 'correct' && <div className="feedback good"><Check size={18}/> Верно!</div>}{feedback === 'wrong' && <div className="feedback bad"><X size={18}/> Неверно. {expected.join(', ')}</div>}{feedback === 'manual' && <div className="manual-check"><p>В словаре указано: <strong>{expected.join(', ')}</strong></p><p>Твой вариант подходит?</p><div><button className="secondary-button" onClick={() => mark(false)}>Неправильно</button><button className="success-button" onClick={() => mark(true)}>Правильно</button></div></div>}
+  if (!active) return <section className="page training-page"><div className="page-heading"><div><p className="eyebrow">ЗАКРЕПЛЯЙ ЗНАНИЯ</p><h1>Тренировка</h1><p className="muted">Небольшая практика каждый день.</p></div></div><div className="record-card"><div className="record-icon"><Trophy size={21}/></div><div><span>Рекорд серии · {direction === 'en-ru' ? 'EN → RU' : 'RU → EN'}</span><strong>{bestStreak}</strong><small>правильных ответов подряд</small></div></div><div className="direction-card"><h2>Выбери направление</h2><button className={direction === 'en-ru' ? 'direction-option selected' : 'direction-option'} onClick={() => setDirection('en-ru')}><span className="direction-flag">EN</span><span><strong>Английский → Русский</strong><small>Вспоминай перевод слова</small></span><span className="radio-dot"/></button><button className={direction === 'ru-en' ? 'direction-option selected' : 'direction-option'} onClick={() => setDirection('ru-en')}><span className="direction-flag ru">RU</span><span><strong>Русский → Английский</strong><small>Вспоминай английское слово</small></span><span className="radio-dot"/></button><button className="primary-button full-button start-button" onClick={start}>Начать тренировку <ChevronRight size={18}/></button><p className="training-note">В этом цикле {direction === 'en-ru' ? words.length : words.reduce((sum, word) => sum + word.translations.length, 0)} карточек. Каждая встретится один раз за круг.</p></div></section>
+  return <section className="page training-page"><div className="training-topline"><button className="back-button" onClick={() => setActive(false)}>← Завершить</button><span>{index + 1} / {deck.length}</span></div><div className="streak-line"><span>Текущая серия</span><strong>{streak}</strong></div><div className="progress-track"><div style={{ width: `${((index + 1) / deck.length) * 100}%` }}/></div><div className="flash-card"><span className="card-direction">{direction === 'en-ru' ? 'ПЕРЕВЕДИ НА РУССКИЙ' : 'ПЕРЕВЕДИ НА АНГЛИЙСКИЙ'}</span><div className="flash-word">{prompt}</div><form onSubmit={check} className="answer-form"><input ref={inputRef} autoFocus autoComplete="off" autoCapitalize="off" spellCheck={false} enterKeyHint="done" value={answer} onChange={e => setAnswer(e.target.value)} placeholder="Твой перевод…"/><button className="primary-button" disabled={!!feedback || !answer.trim()} onPointerDown={event => event.preventDefault()} type="submit">Проверить</button></form>
+    {feedback === 'correct' && <div className="feedback good"><Check size={18}/> Верно!</div>}{feedback === 'wrong' && <div className="feedback bad"><X size={18}/> Неверно. {expected.join(', ')}</div>}{feedback === 'manual' && <div className="manual-check"><p>В словаре указано: <strong>{expected.join(', ')}</strong></p><p>Твой вариант подходит?</p><div><button className="secondary-button" onPointerDown={event => event.preventDefault()} onClick={() => mark(false)}>Неправильно</button><button className="success-button" onPointerDown={event => event.preventDefault()} onClick={() => mark(true)}>Правильно</button></div></div>}
     {feedback && <button className="next-button" onClick={next}>Следующее слово <ChevronRight size={18}/></button>}
-  </div><div className="training-bottom"><span><Trophy size={16}/> Рекорд: {stats.bestCorrectStreak}</span><span><ArrowLeftRight size={16}/> {direction === 'en-ru' ? 'EN → RU' : 'RU → EN'}</span></div></section>
+  </div><div className="training-bottom"><span><Trophy size={16}/> Рекорд: {bestStreak}</span><span><ArrowLeftRight size={16}/> {direction === 'en-ru' ? 'EN → RU' : 'RU → EN'}</span></div></section>
 }

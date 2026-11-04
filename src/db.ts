@@ -1,5 +1,5 @@
 export type Word = { id: string; word: string; translations: string[]; createdAt: string; updatedAt: string }
-export type Stats = { bestCorrectStreak: number }
+export type Stats = { bestCorrectStreakEnRu: number; bestCorrectStreakRuEn: number }
 const DB_NAME = 'my-vocabulary-db'
 const STORE = 'app'
 
@@ -29,6 +29,9 @@ async function put<T>(key: string, value: T): Promise<void> {
 }
 export const loadWords = () => get<Word[]>('words', [])
 export const saveWords = (words: Word[]) => put('words', words)
-export const loadStats = () => get<Stats>('stats', { bestCorrectStreak: 0 })
+export async function loadStats(): Promise<Stats> {
+  const saved = await get<Partial<Stats>>('stats', {})
+  return { bestCorrectStreakEnRu: Math.max(0, saved.bestCorrectStreakEnRu ?? 0), bestCorrectStreakRuEn: Math.max(0, saved.bestCorrectStreakRuEn ?? 0) }
+}
 export const saveStats = (stats: Stats) => put('stats', stats)
 export const normalize = (value: string) => value.trim().replace(/\s+/g, ' ').toLocaleLowerCase()
