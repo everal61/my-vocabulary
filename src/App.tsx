@@ -18,6 +18,7 @@ export default function App() {
   const [translationInput, setTranslationInput] = useState('')
   const [editId, setEditId] = useState<string | null>(null)
   const [notice, setNotice] = useState('')
+  const [trainingActive, setTrainingActive] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { Promise.all([loadWords(), loadStats()]).then(([w, s]) => { setWords(w); setStats(s); setReady(true) }).catch(() => { setNotice('Не удалось открыть локальное хранилище') }) }, [])
@@ -84,11 +85,11 @@ export default function App() {
         </>}
       </section>}
       {tab === 'add' && <section className="page narrow-page"><div className="page-heading"><div><p className="eyebrow">ПОПОЛНЯЙ СЛОВАРЬ</p><h1>{editId ? 'Редактировать' : 'Новое слово'}</h1><p className="muted">Одно слово — несколько вариантов перевода.</p></div>{editId && <button className="icon-button" onClick={clearForm}><X size={18}/></button>}</div>
-        <form className="word-form" onSubmit={submitWord}><label>Английское слово<input autoFocus value={wordInput} onChange={e => setWordInput(e.target.value)} placeholder="Например, nevertheless"/></label><label>Перевод на русский <span className="label-hint">несколько вариантов разделяй запятой</span><textarea value={translationInput} onChange={e => setTranslationInput(e.target.value)} placeholder="тем не менее, несмотря на это" rows={4}/></label><button className="primary-button full-button" type="submit"><Check size={18}/>{editId ? 'Сохранить изменения' : 'Добавить в словарь'}</button></form>
+        <form className="word-form" onSubmit={submitWord}><label>Английское слово<input autoFocus lang="en" inputMode="text" autoCapitalize="none" value={wordInput} onChange={e => setWordInput(e.target.value)} placeholder="Например, nevertheless"/></label><label>Перевод на русский <span className="label-hint">несколько вариантов разделяй запятой</span><textarea lang="ru" inputMode="text" value={translationInput} onChange={e => setTranslationInput(e.target.value)} placeholder="тем не менее, несмотря на это" rows={4}/></label><button className="primary-button full-button" type="submit"><Check size={18}/>{editId ? 'Сохранить изменения' : 'Добавить в словарь'}</button></form>
       </section>}
-      {tab === 'training' && <Training words={sortedWords} stats={stats} setStats={setStats} />}
+      {tab === 'training' && <Training words={sortedWords} stats={stats} setStats={setStats} onActiveChange={setTrainingActive} />}
     </main>
-    <nav className="bottom-nav"><button className={tab === 'dictionary' ? 'nav-item active' : 'nav-item'} onClick={() => setTab('dictionary')}><BookOpen size={20}/><span>Словарь</span></button><button className={tab === 'add' ? 'nav-item active add-nav' : 'nav-item add-nav'} onClick={() => { clearForm(); setTab('add') }}><span className="nav-add-icon"><Plus size={22}/></span><span>Добавить</span></button><button className={tab === 'training' ? 'nav-item active' : 'nav-item'} onClick={() => setTab('training')}><Dumbbell size={20}/><span>Тренировка</span></button></nav>
+    <nav className={tab === 'training' && trainingActive ? "bottom-nav hidden-nav" : "bottom-nav"}><button className={tab === 'dictionary' ? 'nav-item active' : 'nav-item'} onClick={() => setTab('dictionary')}><BookOpen size={20}/><span>Словарь</span></button><button className={tab === 'add' ? 'nav-item active add-nav' : 'nav-item add-nav'} onClick={() => { clearForm(); setTab('add') }}><span className="nav-add-icon"><Plus size={22}/></span><span>Добавить</span></button><button className={tab === 'training' ? 'nav-item active' : 'nav-item'} onClick={() => setTab('training')}><Dumbbell size={20}/><span>Тренировка</span></button></nav>
     {notice && <div className="toast">{notice}</div>}
   </div>
 }
@@ -97,15 +98,15 @@ function wordLabel(n: number) { const mod10 = n % 10, mod100 = n % 100; if (mod1
 
 type TrainingCard = { word: Word; translation: string }
 
-function Training({ words, stats, setStats }: { words: Word[]; stats: Stats; setStats: React.Dispatch<React.SetStateAction<Stats>> }) {
+function Training({ words, stats, setStats, onActiveChange }: { words: Word[]; stats: Stats; setStats: React.Dispatch<React.SetStateAction<Stats>>; onActiveChange: (active: boolean) => void }) {
   const [direction, setDirection] = useState<Direction>('en-ru')
   const [active, setActive] = useState(false)
   const [deck, setDeck] = useState<TrainingCard[]>([])
   const [index, setIndex] = useState(0)
   const [answer, setAnswer] = useState('')
+  const [revealed, setRevealed] = useState(false)
   const [feedback, setFeedback] = useState<'correct' | 'wrong' | 'manual' | null>(null)
   const [streak, setStreak] = useState(0)
-  const [manualWord, setManualWord] = useState<Word | null>(null)
   const timer = useRef<number | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const current = deck[index]
@@ -113,6 +114,34 @@ function Training({ words, stats, setStats }: { words: Word[]; stats: Stats; set
   const expected = current ? (direction === 'en-ru' ? current.word.translations : [current.word.word]) : []
   const bestStreak = direction === 'en-ru' ? stats.bestCorrectStreakEnRu : stats.bestCorrectStreakRuEn
 
+  useEffect(() => { onActiveChange(active); return () => onActiveChange(false) }, [active, onActiveChange])
+  useEffect(() => {
+    document.documentElement.classList.toggle('training-active', active)
+    document.body.classList.toggle('training-active', active)
+    return () => {
+      document.documentElement.classList.remove('training-active')
+      document.body.classList.remove('training-active')
+    }
+  }, [active])
+  useEffect(() => {
+    const viewport = window.visualViewport
+    if (!viewport) return
+    const updateViewport = () => {
+      document.documentElement.style.setProperty('--app-visual-height', `${viewport.height}px`)
+      document.documentElement.style.setProperty('--app-visual-offset-top', `${viewport.offsetTop}px`)
+    }
+    updateViewport()
+    viewport.addEventListener('resize', updateViewport)
+    viewport.addEventListener('scroll', updateViewport)
+    window.addEventListener('orientationchange', updateViewport)
+    return () => {
+      viewport.removeEventListener('resize', updateViewport)
+      viewport.removeEventListener('scroll', updateViewport)
+      window.removeEventListener('orientationchange', updateViewport)
+      document.documentElement.style.removeProperty('--app-visual-height')
+      document.documentElement.style.removeProperty('--app-visual-offset-top')
+    }
+  }, [])
   useEffect(() => () => { if (timer.current) window.clearTimeout(timer.current) }, [])
   function shuffle(items: TrainingCard[]) { const a = [...items]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]] } return a }
   function makeDeck(source: Word[], mode: Direction): TrainingCard[] {
@@ -121,13 +150,14 @@ function Training({ words, stats, setStats }: { words: Word[]; stats: Stats; set
       : source.flatMap(word => word.translations.map(translation => ({ word, translation })))
     return shuffle(cards)
   }
-  function start() { setDeck(makeDeck(words, direction)); setIndex(0); setAnswer(''); setFeedback(null); setStreak(0); setActive(true) }
+  function start() { setDeck(makeDeck(words, direction)); setIndex(0); setAnswer(''); setRevealed(false); setFeedback(null); setStreak(0); setActive(true) }
   function next() {
     if (timer.current) window.clearTimeout(timer.current)
     if (index + 1 >= deck.length) { setDeck(makeDeck(words, direction)); setIndex(0) } else setIndex(i => i + 1)
-    setAnswer(''); setFeedback(null); setManualWord(null)
+    setAnswer(''); setRevealed(false); setFeedback(null)
+    if (direction === 'ru-en') requestAnimationFrame(() => inputRef.current?.focus())
   }
-  function scheduleNext() { if (timer.current) window.clearTimeout(timer.current); timer.current = window.setTimeout(next, 1000) }
+  function scheduleNext() { if (timer.current) window.clearTimeout(timer.current); timer.current = window.setTimeout(next, 500) }
   function mark(correct: boolean) {
     setFeedback(correct ? 'correct' : 'wrong')
     const nextStreak = correct ? streak + 1 : 0
@@ -141,12 +171,27 @@ function Training({ words, stats, setStats }: { words: Word[]; stats: Stats; set
     e.preventDefault()
     if (!current || feedback || !answer.trim()) return
     if (expected.some(v => normalize(v) === normalize(answer))) mark(true)
-    else { setFeedback('manual'); setManualWord(current.word) }
+    else setFeedback('manual')
   }
+  function finish() { if (timer.current) window.clearTimeout(timer.current); setActive(false); setFeedback(null); setAnswer('') }
+
   if (!words.length) return <section className="page"><div className="page-heading"><div><p className="eyebrow">ЗАКРЕПЛЯЙ ЗНАНИЯ</p><h1>Тренировка</h1><p className="muted">Добавь слова в словарь, чтобы начать заниматься.</p></div></div><div className="empty-state"><div className="empty-icon"><Dumbbell size={26}/></div><h2>Пока нечего повторять</h2><p>Сначала добавь несколько слов в словарь.</p></div></section>
-  if (!active) return <section className="page training-page"><div className="page-heading"><div><p className="eyebrow">ЗАКРЕПЛЯЙ ЗНАНИЯ</p><h1>Тренировка</h1><p className="muted">Небольшая практика каждый день.</p></div></div><div className="record-card"><div className="record-icon"><Trophy size={21}/></div><div><span>Рекорд серии · {direction === 'en-ru' ? 'EN → RU' : 'RU → EN'}</span><strong>{bestStreak}</strong><small>правильных ответов подряд</small></div></div><div className="direction-card"><h2>Выбери направление</h2><button className={direction === 'en-ru' ? 'direction-option selected' : 'direction-option'} onClick={() => setDirection('en-ru')}><span className="direction-flag">EN</span><span><strong>Английский → Русский</strong><small>Вспоминай перевод слова</small></span><span className="radio-dot"/></button><button className={direction === 'ru-en' ? 'direction-option selected' : 'direction-option'} onClick={() => setDirection('ru-en')}><span className="direction-flag ru">RU</span><span><strong>Русский → Английский</strong><small>Вспоминай английское слово</small></span><span className="radio-dot"/></button><button className="primary-button full-button start-button" onClick={start}>Начать тренировку <ChevronRight size={18}/></button><p className="training-note">В этом цикле {direction === 'en-ru' ? words.length : words.reduce((sum, word) => sum + word.translations.length, 0)} карточек. Каждая встретится один раз за круг.</p></div></section>
-  return <section className="page training-page"><div className="training-topline"><button className="back-button" onClick={() => setActive(false)}>← Завершить</button><span>{index + 1} / {deck.length}</span></div><div className="streak-line"><span>Текущая серия</span><strong>{streak}</strong></div><div className="progress-track"><div style={{ width: `${((index + 1) / deck.length) * 100}%` }}/></div><div className="flash-card"><span className="card-direction">{direction === 'en-ru' ? 'ПЕРЕВЕДИ НА РУССКИЙ' : 'ПЕРЕВЕДИ НА АНГЛИЙСКИЙ'}</span><div className="flash-word">{prompt}</div><form onSubmit={check} className="answer-form"><input ref={inputRef} autoFocus autoComplete="off" autoCapitalize="off" spellCheck={false} enterKeyHint="done" value={answer} onChange={e => setAnswer(e.target.value)} placeholder="Твой перевод…"/><button className="primary-button" disabled={!!feedback || !answer.trim()} onPointerDown={event => event.preventDefault()} type="submit">Проверить</button></form>
-    {feedback === 'correct' && <div className="feedback good"><Check size={18}/> Верно!</div>}{feedback === 'wrong' && <div className="feedback bad"><X size={18}/> Неверно. {expected.join(', ')}</div>}{feedback === 'manual' && <div className="manual-check"><p>В словаре указано: <strong>{expected.join(', ')}</strong></p><p>Твой вариант подходит?</p><div><button className="secondary-button" onPointerDown={event => event.preventDefault()} onClick={() => mark(false)}>Неправильно</button><button className="success-button" onPointerDown={event => event.preventDefault()} onClick={() => mark(true)}>Правильно</button></div></div>}
-    {feedback && <button className="next-button" onClick={next}>Следующее слово <ChevronRight size={18}/></button>}
-  </div><div className="training-bottom"><span><Trophy size={16}/> Рекорд: {bestStreak}</span><span><ArrowLeftRight size={16}/> {direction === 'en-ru' ? 'EN → RU' : 'RU → EN'}</span></div></section>
+  if (!active) return <section className="page training-page"><div className="page-heading"><div><p className="eyebrow">ЗАКРЕПЛЯЙ ЗНАНИЯ</p><h1>Тренировка</h1><p className="muted">Небольшая практика каждый день.</p></div></div><div className="record-card"><div className="record-icon"><Trophy size={21}/></div><div><span>Рекорд серии · {direction === 'en-ru' ? 'EN → RU' : 'RU → EN'}</span><strong>{bestStreak}</strong><small>правильных ответов подряд</small></div></div><div className="direction-card"><h2>Выбери направление</h2><button className={direction === 'en-ru' ? 'direction-option selected' : 'direction-option'} onClick={() => setDirection('en-ru')}><span className="direction-flag">EN</span><span><strong>Английский → Русский</strong><small>Вспоминай перевод и проверяй себя</small></span><span className="radio-dot"/></button><button className={direction === 'ru-en' ? 'direction-option selected' : 'direction-option'} onClick={() => setDirection('ru-en')}><span className="direction-flag ru">RU</span><span><strong>Русский → Английский</strong><small>Вспоминай написание английского слова</small></span><span className="radio-dot"/></button><button className="primary-button full-button start-button" onClick={start}>Начать тренировку <ChevronRight size={18}/></button><p className="training-note">В этом цикле {direction === 'en-ru' ? words.length : words.reduce((sum, word) => sum + word.translations.length, 0)} карточек. Каждая встретится один раз за круг.</p></div></section>
+
+  return <section className={`page training-page active-training ${direction === 'en-ru' ? 'recall-mode' : 'typing-mode'}`}>
+    <div className="training-fixed-header"><div className="training-topline"><button className="back-button" onClick={finish}>← Завершить</button><span>{index + 1} / {deck.length}</span></div><div className="streak-line"><span>Текущая серия</span><strong>{streak}</strong></div><div className="progress-track"><div style={{ width: `${((index + 1) / deck.length) * 100}%` }}/></div></div>
+    <div className="flash-card"><span className="card-direction">{direction === 'en-ru' ? 'ВСПОМНИ ПЕРЕВОД' : 'ПЕРЕВЕДИ НА АНГЛИЙСКИЙ'}</span><div className="flash-word">{prompt}</div>
+      {direction === 'en-ru' ? <div className="recall-actions">
+        {!revealed ? <button className="reveal-button" onClick={() => setRevealed(true)}>Проверить</button> : <>
+          <div className="revealed-translations">{current.word.translations.map((translation, i) => <span key={`${translation}-${i}`}>{translation}</span>)}</div>
+          <div className="self-rate"><button className="rate-button wrong-rate" onClick={() => mark(false)}>Неправильно</button><button className="rate-button correct-rate" onClick={() => mark(true)}>Правильно</button></div>
+        </>}
+        {feedback && <div className={`feedback ${feedback === 'correct' ? 'good' : 'bad'}`}>{feedback === 'correct' ? <><Check size={18}/> Верно!</> : <><X size={18}/> Неверно</>}</div>}
+      </div> : <>
+        <form onSubmit={check} className="answer-form"><input ref={inputRef} autoFocus autoComplete="off" autoCapitalize="off" spellCheck={false} enterKeyHint="done" lang="en" inputMode="text" value={answer} onChange={e => setAnswer(e.target.value)} placeholder="Английское слово…"/><button className="primary-button" disabled={!!feedback || !answer.trim()} onPointerDown={event => event.preventDefault()} type="submit">Проверить</button></form>
+        {feedback === 'correct' && <div className="feedback good"><Check size={18}/> Верно!</div>}{feedback === 'wrong' && <div className="feedback bad"><X size={18}/> Неверно. {expected.join(', ')}</div>}{feedback === 'manual' && <div className="manual-check"><p>Правильный ответ: <strong>{expected.join(', ')}</strong></p><p>Твой вариант подходит?</p><div><button className="secondary-button" onPointerDown={event => event.preventDefault()} onClick={() => mark(false)}>Неправильно</button><button className="success-button" onPointerDown={event => event.preventDefault()} onClick={() => mark(true)}>Правильно</button></div></div>}
+      </>}
+    </div>
+    <div className="training-bottom"><span><Trophy size={16}/> Рекорд: {bestStreak}</span><span><ArrowLeftRight size={16}/> {direction === 'en-ru' ? 'EN → RU' : 'RU → EN'}</span></div>
+  </section>
 }

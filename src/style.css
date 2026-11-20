@@ -11,3 +11,318 @@ input, textarea, select, button { touch-action: manipulation; }
   .main-content { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
   .flash-card { min-height: min(360px, calc(100dvh - 260px)); }
 }
+
+/* Updated iPhone-first layout */
+.search-wrap {
+  position: fixed;
+  z-index: 12;
+  left: 50%;
+  bottom: calc(76px + env(safe-area-inset-bottom) + 10px);
+  width: min(560px, calc(100vw - 28px));
+  margin: 0;
+  transform: translateX(-50%);
+}
+.page:has(.word-table) { padding-bottom: 78px; }
+.hidden-nav { display: none; }
+.active-training {
+  position: fixed;
+  z-index: 8;
+  top: 72px;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: min(900px, 100%);
+  margin: 0 auto;
+  padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+  background: #f7f9fc;
+}
+.training-fixed-header { flex: 0 0 auto; }
+.active-training .training-topline { margin: 0 0 10px; }
+.active-training .streak-line { margin-bottom: 6px; }
+.active-training .progress-track { margin-bottom: 0; }
+.active-training .flash-card {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 18px 20px;
+  justify-content: center;
+  overflow-y: auto;
+}
+.active-training .flash-word { margin: 22px 0 26px; }
+.active-training .training-bottom { flex: 0 0 auto; margin: 0; padding: 4px 2px; }
+.recall-actions { width: 100%; max-width: 480px; display: flex; flex-direction: column; align-items: stretch; gap: 14px; }
+.reveal-button, .rate-button {
+  min-height: 76px;
+  border: 0;
+  border-radius: 16px;
+  padding: 16px 12px;
+  font: 750 17px Inter, sans-serif;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.reveal-button { width: 100%; color: #fff; background: #3169e8; box-shadow: 0 5px 14px #3169e82b; }
+.revealed-translations { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 19px; line-height: 1.35; font-weight: 650; color: #253550; text-align: center; }
+.self-rate { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; }
+.rate-button { min-height: 88px; font-size: 16px; }
+.wrong-rate { color: #fff; background: #dc454d; }
+.correct-rate { color: #fff; background: #169b65; }
+@media(max-width:600px) {
+  .search-wrap { bottom: calc(76px + env(safe-area-inset-bottom) + 8px); }
+  .page:has(.word-table) { padding-bottom: 82px; }
+  .active-training { top: 60px; padding: 10px 13px calc(9px + env(safe-area-inset-bottom)); gap: 8px; }
+  .active-training .flash-card { padding: 14px 13px; border-radius: 17px; }
+  .active-training .flash-word { margin: 18px 0 22px; font-size: clamp(30px, 9vw, 42px); }
+  .reveal-button { min-height: 82px; font-size: 19px; }
+  .rate-button { min-height: 94px; font-size: 16px; }
+  .active-training .training-bottom { font-size: 10px; }
+}
+@media(max-height:700px) {
+  .active-training .flash-word { margin: 12px 0 16px; }
+  .reveal-button { min-height: 64px; }
+  .rate-button { min-height: 72px; }
+  .revealed-translations { font-size: 16px; gap: 5px; }
+}
+
+
+/* Stability refinements for the iPhone training screen */
+.active-training {
+  top: calc(var(--app-visual-offset-top, 0px) + 60px);
+  bottom: auto;
+  height: calc(var(--app-visual-height, 100dvh) - var(--app-visual-offset-top, 0px) - 60px);
+  min-height: 0;
+}
+
+/* Keep the EN → RU prompt anchored while the answer is revealed. */
+.active-training.recall-mode .flash-card {
+  justify-content: flex-start;
+  gap: 0;
+  padding-top: clamp(24px, 5vh, 48px);
+  padding-bottom: clamp(20px, 4vh, 36px);
+}
+.active-training.recall-mode .card-direction {
+  flex: 0 0 auto;
+}
+.active-training.recall-mode .flash-word {
+  flex: 0 0 auto;
+  min-height: 1.3em;
+  margin: clamp(26px, 5vh, 48px) 0 clamp(30px, 6vh, 54px);
+}
+.active-training.recall-mode .recall-actions {
+  flex: 1 0 220px;
+  min-height: 220px;
+  margin-top: 0;
+  justify-content: space-between;
+  gap: 22px;
+}
+.active-training.recall-mode .revealed-translations {
+  min-height: 76px;
+  justify-content: center;
+  padding: 8px 0;
+  gap: 10px;
+}
+.active-training.recall-mode .reveal-button {
+  margin-top: auto;
+}
+.active-training.recall-mode .self-rate {
+  margin-top: auto;
+}
+
+@media (max-width: 600px) {
+  .active-training {
+    top: calc(var(--app-visual-offset-top, 0px) + 60px);
+    height: calc(var(--app-visual-height, 100dvh) - var(--app-visual-offset-top, 0px) - 60px);
+    padding-bottom: calc(9px + env(safe-area-inset-bottom));
+  }
+  .active-training.recall-mode .flash-card {
+    padding-top: 24px;
+    padding-bottom: 22px;
+  }
+  .active-training.recall-mode .flash-word {
+    margin: 30px 0 38px;
+  }
+  .active-training.recall-mode .recall-actions {
+    flex-basis: 230px;
+    min-height: 230px;
+    gap: 24px;
+  }
+}
+@media (max-height: 700px) {
+  .active-training.recall-mode .flash-word {
+    margin: 18px 0 24px;
+  }
+  .active-training.recall-mode .recall-actions {
+    flex-basis: 190px;
+    min-height: 190px;
+    gap: 14px;
+  }
+  .active-training.recall-mode .revealed-translations {
+    min-height: 62px;
+    font-size: 15px;
+  }
+}
+
+
+/* RU → EN: fixed, non-scrolling layout that adapts to the iOS keyboard. */
+html.training-active,
+body.training-active {
+  overflow: hidden !important;
+  overscroll-behavior: none;
+}
+
+/* visualViewport.height is already the visible height; offsetTop is only a position. */
+.active-training {
+  top: calc(var(--app-visual-offset-top, 0px) + 60px);
+  bottom: auto;
+  height: calc(var(--app-visual-height, 100dvh) - 60px);
+  min-height: 0;
+}
+
+.active-training.typing-mode {
+  gap: 8px;
+  overflow: hidden;
+}
+
+.active-training.typing-mode .training-fixed-header {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.active-training.typing-mode .training-topline {
+  margin: 0 0 5px;
+  min-height: 26px;
+}
+
+.active-training.typing-mode .streak-line {
+  margin-bottom: 4px;
+}
+
+.active-training.typing-mode .progress-track {
+  margin-bottom: 0;
+}
+
+.active-training.typing-mode .flash-card {
+  flex: 1 1 0;
+  min-height: 0;
+  padding: 12px 14px;
+  gap: 0;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.active-training.typing-mode .card-direction {
+  flex: 0 0 auto;
+}
+
+.active-training.typing-mode .flash-word {
+  flex: 0 1 auto;
+  min-height: 0;
+  margin: clamp(8px, 2.5vh, 20px) 0;
+  font-size: clamp(25px, 7vw, 38px);
+  line-height: 1.12;
+}
+
+.active-training.typing-mode .answer-form {
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: 440px;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 8px;
+  margin: 0;
+}
+
+.active-training.typing-mode .answer-form input {
+  width: 1px;
+  min-width: 0;
+  min-height: 48px;
+  padding: 10px 11px;
+}
+
+.active-training.typing-mode .answer-form button {
+  flex: 0 0 auto;
+  width: auto;
+  min-height: 48px;
+  padding: 10px 13px;
+  font-size: 12px;
+}
+
+.active-training.typing-mode .feedback,
+.active-training.typing-mode .manual-check {
+  flex: 0 0 auto;
+  margin-top: 9px;
+}
+
+.active-training.typing-mode .manual-check p {
+  margin: 4px 0;
+}
+
+.active-training.typing-mode .manual-check > div {
+  margin-top: 8px;
+}
+
+.active-training.typing-mode .training-bottom {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 2px 2px 4px;
+}
+
+@media (max-width: 600px) {
+  .active-training.typing-mode {
+    padding: 8px 12px calc(7px + env(safe-area-inset-bottom));
+    gap: 7px;
+  }
+
+  .active-training.typing-mode .flash-card {
+    padding: 10px 11px;
+    border-radius: 15px;
+  }
+
+  .active-training.typing-mode .flash-word {
+    margin: clamp(6px, 2vh, 15px) 0;
+    font-size: clamp(24px, 7.5vw, 36px);
+  }
+
+  .active-training.typing-mode .answer-form input {
+    min-height: 46px;
+    font-size: 16px !important;
+  }
+
+  .active-training.typing-mode .answer-form button {
+    min-height: 46px;
+    padding-inline: 11px;
+  }
+
+  .active-training.typing-mode .manual-check {
+    font-size: 11px;
+  }
+}
+
+@media (max-height: 520px) {
+  .active-training.typing-mode {
+    padding-top: 5px;
+    padding-bottom: 5px;
+    gap: 4px;
+  }
+
+  .active-training.typing-mode .training-topline {
+    min-height: 21px;
+    margin-bottom: 2px;
+  }
+
+  .active-training.typing-mode .flash-card {
+    padding-block: 6px;
+  }
+
+  .active-training.typing-mode .flash-word {
+    margin-block: 5px;
+    font-size: clamp(22px, 6vw, 30px);
+  }
+
+  .active-training.typing-mode .answer-form input,
+  .active-training.typing-mode .answer-form button {
+    min-height: 40px;
+  }
+}
